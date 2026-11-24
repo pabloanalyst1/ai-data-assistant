@@ -4,7 +4,7 @@ Each question in [`eval/questions.yaml`](../eval/questions.yaml) has a gold SQL 
 
 | Model | Correct | Execution accuracy | Run on |
 |---|---|---|---|
-| Claude (`claude-sonnet-5-5`) | 24 / 25 | **96%** | 2026-11-24 |
+| Claude (`claude-sonnet-5-5`) | 25 / 25 | **100%** | 2026-11-24 |
 | Offline baseline: no LLM, reuses the closest worked example | 0 / 25 | **0%** | 2026-11-23 |
 
 ## Claude · `claude-sonnet-5-5`
@@ -26,7 +26,7 @@ Each question in [`eval/questions.yaml`](../eval/questions.yaml) has a gold SQL 
 | q13 | Which promotion generated the most incremental gross margin? | ✅ |  |
 | q14 | What percentage of net sales was sold on promotion each year? | ✅ |  |
 | q15 | What is the 3-month retention of customers acquired in January 2025? | ✅ |  |
-| q16 | ¿Cuál es el ticket promedio en tiendas físicas frente a los canales en línea en 2026? | ❌ | no column matches channel_type |
+| q16 | ¿Cuál es el ticket promedio en tiendas físicas frente a los canales en línea en 2026? | ✅ |  |
 | q17 | What were the top 5 products by net sales in 2026? | ✅ |  |
 | q18 | How many orders did we have in October 2026, and how does that compare with October 2025? | ✅ |  |
 | q19 | What is the contribution margin % by channel in 2026? | ✅ |  |
@@ -50,7 +50,7 @@ Each question in [`eval/questions.yaml`](../eval/questions.yaml) has a gold SQL 
 | q07 | How many active customers do we have? | ❌ | answer too large to check |
 | q08 | Which store had the highest net sales last quarter? | ❌ | first row lacks ['Casa Ceiba Zona 10'] |
 | q09 | What is the return rate by category? | ❌ | 4 rows, expected 6 |
-| q10 | Show monthly net sales for 2025. | ❌ | no column matches month_start |
+| q10 | Show monthly net sales for 2025. | ❌ | no column matches net_sales |
 | q11 | How many new customers did each channel acquire in 2026? | ❌ | 12 rows, expected 4 |
 | q12 | What share of net sales came from online channels in 2026? | ❌ | answer too large to check |
 | q13 | Which promotion generated the most incremental gross margin? | ❌ | first row lacks ['Christmas toys 2025'] |

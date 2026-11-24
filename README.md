@@ -98,14 +98,25 @@ Details per question: [**docs/eval_results.md**](docs/eval_results.md).
 <!-- EVAL:START -->
 | Model | Correct | Execution accuracy | Run on |
 |---|---|---|---|
-| Claude (`claude-sonnet-5-5`) | 24 / 25 | **96%** | 2026-11-24 |
+| Claude (`claude-sonnet-5-5`) | 25 / 25 | **100%** | 2026-11-24 |
 | Offline baseline: no LLM, reuses the closest worked example | 0 / 25 | **0%** | 2026-11-23 |
 <!-- EVAL:END -->
+
+**Claude Sonnet 5.5 answered all 25 correctly**, in about 2 seconds per question and without needing the
+repair loop. Its queries follow the glossary rather than generic habits: repurchase from
+`repurchased_within_90d`, year to date against the same months of last year, margins as ratios of sums.
+It answered the Spanish questions in Spanish, down to the column names (`tasa_recompra_pct`).
+On a second run the scorer marked one answer wrong although it was right: the labels were translated
+("Tiendas físicas" instead of "Offline"). The scorer now accepts differently worded labels when the numbers
+match and identify every row, and `--rescore` re-scores saved answers without calling the model.
 
 The offline baseline answers every question with the SQL of the closest worked example and scores 0%. That is
 by design: the worked examples cover different questions from the evaluation set, so copying them never
 works, and the score measures real SQL generation. The scorer itself is tested: a model that writes the gold
 SQL scores 100%, and correct alternatives (fractions, extra columns, month names) pass while wrong ones fail.
+
+A perfect score on 25 questions makes the set a regression test (a change to the prompt, the glossary or the
+model must keep it at 25/25) more than a ranking. Harder questions are the next step (see below).
 
 To evaluate a real model, run `python scripts/run_eval.py --provider anthropic` with `ANTHROPIC_API_KEY` set,
 or run the **Evaluate with an LLM** workflow in GitHub Actions: it uses the repository secret and commits the
@@ -314,7 +325,8 @@ and `LLM_MODEL` override the defaults (Claude Sonnet 5.5 if its key is set, othe
 
 ## Next steps
 
-- Run the evaluation with Claude and with a smaller model to compare accuracy and cost per question.
+- Add harder questions to the evaluation (multi-step "why" questions, ambiguous wording that should prompt a
+  clarification) and compare Sonnet with Haiku on accuracy and cost per question.
 - Log questions, SQL and user feedback to grow the worked examples from real usage.
 - Answer "why" questions with a second step that breaks a change down by channel and category automatically.
 

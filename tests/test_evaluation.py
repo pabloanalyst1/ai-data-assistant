@@ -77,6 +77,26 @@ def test_set_comparison(pred, expected):
     assert compare_results(GOLD, pred, "set")[0] is expected
 
 
+def test_labels_in_another_language_count_if_the_numbers_identify_the_rows():
+    gold = pd.DataFrame({"channel_type": ["Offline", "Online"], "aov": [755.83, 828.14]})
+    spanish = pd.DataFrame({"tipo": ["En línea", "Tiendas físicas"], "orders": [22898, 32131], "aov": [828.14, 755.83]})
+    assert compare_results(gold, spanish, "set") == (True, "ok (labels worded differently)")
+    wrong = spanish.assign(aov=[828.14, 700.0])
+    assert not compare_results(gold, wrong, "set")[0]                       # a wrong number still fails
+    tied = pd.DataFrame({"c": ["A", "B"], "v": [1.0, 1.0]})                 # numbers cannot tell the rows apart
+    assert not compare_results(tied, pd.DataFrame({"x": ["Uno", "Dos"], "v": [1.0, 1.0]}), "set")[0]
+
+
+def test_saved_answers_can_be_rescored_without_the_llm(default_warehouse):
+    from src.evaluation import rescore
+
+    q = QUESTIONS[1]
+    saved = [{"id": q.id, "sql": q.gold_sql, "reason": "", "attempts": 1, "seconds": 1.0},
+             {"id": QUESTIONS[2].id, "sql": None, "reason": "Claude API error", "attempts": 0, "seconds": 0.1}]
+    results = rescore(default_warehouse, saved, QUESTIONS)
+    assert [r.correct for r in results] == [True, False]
+
+
 def test_first_row_and_values_comparisons():
     assert compare_results(pd.DataFrame({"m": ["2025-12"]}), pd.DataFrame({"month": ["2025-12-01"], "s": [9.0]}),
                            "first_row")[0]

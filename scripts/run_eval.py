@@ -4,6 +4,7 @@ Run the pipeline first. Then:
     python scripts/run_eval.py                      # provider from env: Claude / OpenAI if a key is set, else mock
     python scripts/run_eval.py --provider mock      # offline baseline (no key, used in CI)
     python scripts/run_eval.py --provider anthropic # needs ANTHROPIC_API_KEY
+    python scripts/run_eval.py --rescore            # re-score saved answers with the current scorer (no LLM calls)
 
 Writes eval/results_<provider>.json and refreshes docs/eval_results.md and the accuracy table in the README
 (between the EVAL markers), keeping the results of the other providers.
@@ -25,7 +26,7 @@ from src.assistant.knowledge import load_knowledge  # noqa: E402
 from src.assistant.llm import resolve_llm  # noqa: E402
 from src.assistant.retriever import KnowledgeRetriever  # noqa: E402
 from src.config import PipelineConfig  # noqa: E402
-from src.evaluation import accuracy, evaluate, load_questions  # noqa: E402
+from src.evaluation import accuracy, evaluate, load_questions, rescore  # noqa: E402
 
 RESULTS_DIR = ROOT / "eval"
 README = ROOT / "README.md"
@@ -80,8 +81,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--provider", choices=["anthropic", "openai", "mock"], default=None)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions (quick check)")
+    parser.add_argument("--rescore", action="store_true",
+                        help="score the saved answers in eval/results_*.json again, without calling the LLM")
     parser.add_argument("--min-accuracy", type=float, default=None, help="exit with an error below this accuracy")
     args = parser.parse_args()
+
+    if args.rescore:
+        db = PipelineConfig().db_path
+        for path in sorted(RESULTS_DIR.glob("results_*.json")):
+            run = json.loads(path.read_text(encoding="utf-8"))
+            results = rescore(db, run["results"])
+            run.update(accuracy=accuracy(results), correct=sum(r.correct for r in results),
+                       results=[asdict(r) for r in results])
+            path.write_text(json.dumps(run, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"{run['provider']}:{run['model']} -> {run['accuracy']:.0%} ({run['correct']}/{run['total']})")
+        runs = load_all_results()
+        write_report(runs)
+        update_readme(runs)
+        return
 
     knowledge = load_knowledge()
     retriever = KnowledgeRetriever(knowledge)

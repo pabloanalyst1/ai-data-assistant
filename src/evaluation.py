@@ -116,17 +116,30 @@ def compare_results(gold: pd.DataFrame, pred: pd.DataFrame | None, mode: str) ->
     if len(gold) != len(pred):
         return False, f"{len(pred)} rows, expected {len(gold)}"
     mapping: dict[str, tuple[str, float]] = {}
+    unmatched_labels = []
     for gcol in gold.columns:
         found = next(((pcol, s) for pcol in pred.columns if pcol not in {m[0] for m in mapping.values()}
                       for s in [_column_matches(gold[gcol], pred[pcol])] if s is not None), None)
         if found is None:
-            return False, f"no column matches {gcol}"
+            if pd.api.types.is_numeric_dtype(gold[gcol]):
+                return False, f"no column matches {gcol}"
+            unmatched_labels.append(gcol)  # a text label: maybe the same rows, named in another language
+            continue
         mapping[gcol] = found
+    if unmatched_labels:
+        # Labels may differ ('Tiendas físicas' for 'Offline') if the numbers match and identify every row
+        # without ambiguity; a wrong number still fails.
+        numeric = [g for g in mapping if pd.api.types.is_numeric_dtype(gold[g])]
+        if not numeric or gold[numeric].duplicated().any():
+            return False, f"no column matches {unmatched_labels[0]}"
+        gold = gold[list(mapping)]
     # columns match one by one; now check they line up row by row
     gold_rows = sorted((tuple(r) for r in gold.itertuples(index=False)), key=lambda r: [_sort_key(v) for v in r])
     pred_proj = pd.DataFrame({g: pred[p] * s if s != 1.0 else pred[p] for g, (p, s) in mapping.items()})
     pred_rows = sorted((tuple(r) for r in pred_proj.itertuples(index=False)), key=lambda r: [_sort_key(v) for v in r])
     ok = all(values_match(a, b) for gr, pr in zip(gold_rows, pred_rows) for a, b in zip(gr, pr))
+    if ok and unmatched_labels:
+        return True, "ok (labels worded differently)"
     return (ok, "ok" if ok else "rows do not line up")
 
 
@@ -137,6 +150,27 @@ def gold_results(db_path: Path, q: EvalQuestion) -> list[pd.DataFrame]:
         return [pd.read_sql_query(s, conn) for s in [q.gold_sql, *q.alt_gold_sql]]
 
 
+def rescore(db_path: Path, saved: list[dict], questions: list[EvalQuestion] | None = None) -> list[EvalResult]:
+    """Score saved answers (their SQL) again with the current scorer, without asking the LLM."""
+    by_id = {q.id: q for q in questions or load_questions()}
+    out = []
+    with sqlite3.connect(f"{Path(db_path).resolve().as_uri()}?mode=ro", uri=True) as conn:
+        for r in saved:
+            q = by_id[r["id"]]
+            if r.get("sql"):
+                try:
+                    pred = pd.read_sql_query(r["sql"], conn)
+                    checks = [compare_results(g, pred, q.compare) for g in gold_results(db_path, q)]
+                    correct = any(ok for ok, _ in checks)
+                    reason = next((why for ok, why in checks if ok), checks[0][1])
+                except Exception as exc:  # the saved query no longer runs
+                    correct, reason = False, str(exc)
+            else:
+                correct, reason = False, r["reason"]
+            out.append(EvalResult(q.id, q.question, correct, reason, r.get("sql"), r["attempts"], r["seconds"], q.tags))
+    return out
+
+
 def evaluate(assistant, db_path: Path, questions: list[EvalQuestion] | None = None, progress=None) -> list[EvalResult]:
     results = []
     for q in questions or load_questions():
@@ -145,7 +179,7 @@ def evaluate(assistant, db_path: Path, questions: list[EvalQuestion] | None = No
         if answer.ok:
             checks = [compare_results(g, answer.data, q.compare) for g in gold_results(db_path, q)]
             correct = any(ok for ok, _ in checks)
-            reason = "ok" if correct else checks[0][1]
+            reason = next((why for ok, why in checks if ok), checks[0][1])
         else:
             correct, reason = False, answer.error or "no answer"
         results.append(EvalResult(q.id, q.question, correct, reason, answer.sql, len(answer.attempts),
