@@ -54,8 +54,21 @@ def secrets():
         return None
 
 
+def llm_settings() -> tuple:
+    """Which provider settings exist (never the key itself), so the cached assistant is rebuilt when they change."""
+    sec = secrets()
+
+    def present(name):
+        try:
+            return bool(os.environ.get(name) or (sec is not None and sec.get(name)))
+        except Exception:
+            return False
+
+    return tuple(present(n) for n in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "LLM_PROVIDER", "LLM_MODEL"))
+
+
 @st.cache_resource
-def get_assistant(db_path: str) -> DataAssistant:
+def get_assistant(db_path: str, settings: tuple = ()) -> DataAssistant:
     knowledge = load_knowledge()
     retriever = KnowledgeRetriever(knowledge)
     return DataAssistant(db_path, resolve_llm(retriever, secrets=secrets()), knowledge, retriever)
@@ -181,7 +194,7 @@ st.sidebar.title("AI Data Assistant")
 page = st.sidebar.radio("View", ["Ask the data", "Business overview"], label_visibility="collapsed")
 if page == "Ask the data":
     try:
-        assistant = get_assistant(str(db_path))
+        assistant = get_assistant(str(db_path), llm_settings())
     except LLMError as exc:
         st.error(str(exc))
         st.stop()
