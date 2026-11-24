@@ -34,6 +34,20 @@ class LLM(Protocol):
     def complete(self, system: str, messages: list[dict]) -> str: ...
 
 
+def _friendly(vendor: str, exc: Exception) -> str:
+    """API error with a plain explanation of the usual causes. Always contains 'API error' (run_eval stops on it)."""
+    text = str(exc)
+    if "401" in text or "authentication" in text.lower() or "invalid x-api-key" in text.lower():
+        hint = "the API key was rejected. Check that the whole key is saved, without spaces, in the secrets."
+    elif "credit balance" in text.lower():
+        hint = "the API account has no credit left (Plans & Billing in the console)."
+    elif "429" in text or "rate" in text.lower():
+        hint = "too many requests right now. Wait a moment and ask again."
+    else:
+        hint = "the request failed."
+    return f"{vendor} API error: {hint} ({text[:200]})"
+
+
 class AnthropicLLM:
     provider = "anthropic"
 
@@ -51,7 +65,7 @@ class AnthropicLLM:
             resp = self.client.messages.create(model=self.model, max_tokens=self.max_tokens, system=system,
                                                messages=messages)
         except Exception as exc:  # network, auth, rate limit...
-            raise LLMError(f"Claude API error: {exc}") from exc
+            raise LLMError(_friendly("Claude", exc)) from exc
         # Sonnet 5.5 always thinks first: keep only the text blocks of the reply
         return "".join(block.text for block in resp.content if getattr(block, "type", "text") == "text").strip()
 
@@ -72,7 +86,7 @@ class OpenAILLM:
             resp = self.client.chat.completions.create(
                 model=self.model, messages=[{"role": "system", "content": system}, *messages])
         except Exception as exc:
-            raise LLMError(f"OpenAI API error: {exc}") from exc
+            raise LLMError(_friendly("OpenAI", exc)) from exc
         return (resp.choices[0].message.content or "").strip()
 
 
@@ -108,6 +122,7 @@ def _setting(name: str, secrets: Mapping | None) -> str | None:
             value = secrets.get(name)
         except Exception:  # Streamlit raises if no secrets file exists
             value = None
+    value = str(value).strip().strip('"').strip() if value else ""  # pasted keys often carry spaces or newlines
     return value or None
 
 

@@ -197,10 +197,18 @@ def test_openai_adapter_puts_the_system_prompt_first():
     assert sent["messages"][0] == {"role": "system", "content": "SYSTEM"}
 
 
-def test_adapter_errors_become_llm_errors():
+def test_adapter_errors_become_llm_errors_with_a_plain_explanation():
     def boom(**kwargs):
-        raise RuntimeError("401 invalid key")
+        raise RuntimeError("Error code: 401 - invalid x-api-key")
 
     llm = AnthropicLLM(client=SimpleNamespace(messages=SimpleNamespace(create=boom)))
-    with pytest.raises(LLMError, match="invalid key"):
+    with pytest.raises(LLMError, match="Claude API error: the API key was rejected"):
         llm.complete("s", [{"role": "user", "content": "x"}])
+
+
+def test_pasted_keys_are_trimmed(monkeypatch):
+    from src.assistant.llm import _setting
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert _setting("ANTHROPIC_API_KEY", {"ANTHROPIC_API_KEY": "  sk-ant-abc\n"}) == "sk-ant-abc"
+    assert _setting("ANTHROPIC_API_KEY", {"ANTHROPIC_API_KEY": "   "}) is None
