@@ -134,8 +134,12 @@ def overview_page(db_path: str) -> None:
     show = {"Net sales (GTQ)": "Q{:,.0f}", "Orders": "{:,.0f}", "Average order value (GTQ)": "Q{:,.0f}",
             "Gross margin %": "{:.1%}"}
     for col, (_, row) in zip(st.columns(len(show)), kpis[kpis["kpi"].isin(show)].iterrows()):
-        delta = (f"{100 * (row['current_value'] - row['prior_year_value']):+.1f} pts" if "%" in row["kpi"]
-                 else f"{row['change']:+.1%}")
+        if pd.isna(row["prior_year_value"]):  # no data for the same period last year
+            delta = None
+        elif "%" in row["kpi"]:
+            delta = f"{100 * (row['current_value'] - row['prior_year_value']):+.1f} pts"
+        else:
+            delta = f"{row['change']:+.1%}"
         col.metric(row["kpi"], show[row["kpi"]].format(row["current_value"]), delta)
 
     st.subheader("Net sales by channel (monthly, GTQ)")
