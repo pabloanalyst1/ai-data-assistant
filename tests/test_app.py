@@ -27,6 +27,7 @@ def test_asking_a_question_shows_the_answer(demo_env):
     at.chat_input[0].set_value("What were net sales by quarter?").run()
     assert not at.exception, at.exception
     assert len(at.dataframe) == 1
+    assert len(at.get("arrow_vega_lite_chart")) == 1  # the chart (Altair, in the query's row order)
     assert any("SELECT" in c.value for c in at.code)
 
 

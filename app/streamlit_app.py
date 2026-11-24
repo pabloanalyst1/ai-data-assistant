@@ -14,6 +14,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -80,17 +81,27 @@ def read_table(db_path: str, sql: str) -> pd.DataFrame:
         return pd.read_sql_query(sql, conn)
 
 
+def build_chart(data: pd.DataFrame, spec) -> alt.Chart:
+    """Chart in the order the query returned the rows (st.bar_chart would sort the labels alphabetically)."""
+    long = data[[spec.x, *spec.y]].melt(spec.x, var_name="measure", value_name="value")
+    order = list(dict.fromkeys(data[spec.x].astype(str)))
+    long[spec.x] = long[spec.x].astype(str)
+    mark = alt.Chart(long).mark_line(point=True) if spec.type == "line" else alt.Chart(long).mark_bar()
+    encoding = {"x": alt.X(f"{spec.x}:N", sort=order, title=spec.x, axis=alt.Axis(labelLimit=160)),
+                "y": alt.Y("value:Q", title=spec.y[0] if len(spec.y) == 1 else None),
+                "tooltip": [alt.Tooltip(f"{spec.x}:N"), alt.Tooltip("measure:N"), alt.Tooltip("value:Q", format=",.2f")]}
+    if len(spec.y) > 1:
+        encoding["color"] = alt.Color("measure:N", title=None)
+    return mark.encode(**encoding).properties(height=320)
+
+
 def render_answer(answer: Answer) -> None:
     if answer.error:
         st.error(answer.error)
     else:
         st.markdown(answer.explanation)
         if answer.chart:
-            chart_data = answer.data.set_index(answer.chart.x)[answer.chart.y]
-            if answer.chart.type == "line":
-                st.line_chart(chart_data)
-            else:
-                st.bar_chart(chart_data)
+            st.altair_chart(build_chart(answer.data, answer.chart))
         st.dataframe(answer.data, hide_index=True)
         if answer.truncated:
             st.caption(f"Showing the first {MAX_RESULT_ROWS} rows.")
