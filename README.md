@@ -107,8 +107,8 @@ works, and the score measures real SQL generation. The scorer itself is tested: 
 SQL scores 100%, and correct alternatives (fractions, extra columns, month names) pass while wrong ones fail.
 
 To evaluate a real model, run `python scripts/run_eval.py --provider anthropic` with `ANTHROPIC_API_KEY` set,
-or run the **Evaluate with an LLM** workflow in GitHub Actions (it uses the repository secret). Either way the
-results file and the table above are regenerated.
+or run the **Evaluate with an LLM** workflow in GitHub Actions: it uses the repository secret and commits the
+results, so the table above updates by itself.
 
 ## The app
 

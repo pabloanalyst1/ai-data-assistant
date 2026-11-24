@@ -2,6 +2,7 @@ name: Evaluate with an LLM
 
 # Manual run: Actions -> "Evaluate with an LLM" -> Run workflow.
 # Needs the repository secret ANTHROPIC_API_KEY (or OPENAI_API_KEY for provider "openai").
+# The results are committed to main, so the README table updates by itself.
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +15,10 @@ on:
         description: "Model (empty = default)"
         required: false
         default: ""
+
+# The run commits its results (eval/results_<provider>.json, docs/eval_results.md, the README table)
+permissions:
+  contents: write
 
 jobs:
   evaluate:
@@ -38,11 +43,11 @@ jobs:
           LLM_MODEL: ${{ inputs.model }}
         run: python scripts/run_eval.py --provider ${{ inputs.provider }}
 
-      - name: Upload results (commit eval/results_*.json, docs/eval_results.md and README.md to publish them)
-        uses: actions/upload-artifact@v4
-        with:
-          name: eval-results
-          path: |
-            eval/results_*.json
-            docs/eval_results.md
-            README.md
+      - name: Commit the results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add eval/results_*.json docs/eval_results.md README.md
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "Update evaluation results (${{ inputs.provider }})"
+          git push
