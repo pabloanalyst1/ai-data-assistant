@@ -1,0 +1,11 @@
+sort,kpi,current_period,current_value,prior_year_value,change
+1,Net sales (GTQ),2026-01-01 to 2026-10-31,43248144.23,34970289.96,0.2367
+2,Orders,2026-01-01 to 2026-10-31,55029.0,42297.0,0.301
+3,Average order value (GTQ),2026-01-01 to 2026-10-31,785.9155,826.7794,-0.0494
+4,Gross margin %,2026-01-01 to 2026-10-31,0.3613,0.3514,0.0283
+5,Contribution margin %,2026-01-01 to 2026-10-31,0.3498,0.3444,0.0156
+6,Discount rate (share of gross sales),2026-01-01 to 2026-10-31,0.0339,0.0319,0.0613
+7,Return rate (share of sales after discount),2026-01-01 to 2026-10-31,0.0468,0.0468,0.0008
+8,Buying customers (identified),2026-01-01 to 2026-10-31,16686.0,11665.0,0.4304
+9,New customers,2026-01-01 to 2026-10-31,9596.0,8010.0,0.198
+10,Orders with an identified customer %,2026-01-01 to 2026-10-31,0.6055,0.513,0.1803

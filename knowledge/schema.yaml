@@ -1,0 +1,274 @@
+# Tables the assistant may query (the allowlist), with a description of every column.
+# The SQL guard rejects any other table: raw_*, stg_* (which hold e-mails) and the other ref_* tables.
+# Money is in Guatemalan quetzales (GTQ). Dates are TEXT 'YYYY-MM-DD'; timestamps 'YYYY-MM-DD HH:MM:SS' local time.
+
+fct_order_lines:
+  description: >
+    One row per product line of a completed order (stores and online). The grain of every sales metric.
+    Cancelled, test and rejected orders are not here. Returns are attributed back to the line they reverse.
+  columns:
+    order_line_id: Unique line id ('<order_id>-<line_no>')
+    order_id: Order or store ticket id (joins fct_orders)
+    line_no: Line number within the order
+    order_date: Order date (local time). Join dim_date.date for year, quarter, month
+    order_ts: Order timestamp (local time)
+    customer_id: Identified customer (joins dim_customer); NULL for store shoppers without a loyalty card
+    channel_id: STORE, WEB, APP or MARKETPLACE (joins dim_channel)
+    store_id: Store for STORE orders (joins dim_store); NULL online
+    product_id: Product (joins dim_product)
+    category: Product category (Electronics, Home & Kitchen, Fashion, Beauty, Sports & Outdoors, Toys & Kids)
+    subcategory: Product subcategory
+    brand: Brand
+    is_private_label: 1 if a Casa Ceiba own brand (Ceiba Home, Ceiba Studio, Ceiba Botánica)
+    promo_code: Promotion applied to the line (joins dim_promotion); NULL if none
+    is_promo: 1 if the line was sold on promotion
+    quantity: Units sold
+    unit_list_price: List price per unit before discount
+    gross_sales: quantity * unit_list_price
+    discount_amount: Promotional discount on the line
+    returned_quantity: Units later returned
+    returned_amount: Amount refunded for the returns of this line
+    net_sales: gross_sales - discount_amount - returned_amount (the official sales figure)
+    cogs: Cost of the units kept by the customer (unit cost * (quantity - returned_quantity))
+    gross_margin: net_sales - cogs
+    commission: Marketplace partner commission (15% of net sales on MARKETPLACE, 0 elsewhere)
+    contribution_margin: gross_margin - commission
+
+fct_orders:
+  description: One row per completed order or store ticket, with the totals of its lines.
+  columns:
+    order_id: Order or ticket id
+    order_date: Order date (local time)
+    order_ts: Order timestamp (local time)
+    customer_id: Identified customer; NULL for store shoppers without a loyalty card
+    channel_id: STORE, WEB, APP or MARKETPLACE
+    store_id: Store for STORE orders; NULL online
+    source_system: POS (stores) or ECOM (web, app, marketplace)
+    lines: Number of product lines
+    units: Units in the order
+    gross_sales: Sum of line gross sales
+    discount_amount: Sum of line discounts
+    returned_amount: Sum of refunds for this order
+    net_sales: Sum of line net sales
+    cogs: Sum of line cost of goods
+    gross_margin: Sum of line gross margin
+    commission: Sum of marketplace commission
+    contribution_margin: Sum of line contribution margin
+    has_promo: 1 if any line was on promotion
+    has_return: 1 if any line was (partly) returned
+    customer_order_number: 1 for the customer's first order, 2 for the second... NULL for guests
+    days_since_previous_order: Days since the customer's previous order; NULL for first orders and guests
+
+fct_returns:
+  description: One row per return (refund), linked to the sale line it reverses.
+  columns:
+    return_id: Return id
+    order_line_id: Sale line returned (joins fct_order_lines)
+    order_id: Original order
+    return_date: Date of the return
+    order_date: Date of the original order
+    days_to_return: return_date - order_date in days
+    channel_id: Channel of the original order
+    product_id: Product returned
+    category: Category of the product
+    quantity: Units returned
+    refund_amount: Amount refunded
+    reason: Return reason (online only; store returns are 'Not recorded')
+    source_system: POS or ECOM
+
+dim_customer:
+  description: >
+    One row per real customer (duplicate CRM accounts merged, test accounts removed), with precomputed
+    customer facts. Some registered customers never completed an order (total_orders = 0).
+  columns:
+    customer_id: Customer id
+    signup_date: Date the CRM account was created
+    department: Customer's department (Guatemala, Quetzaltenango, ...)
+    region: Central, Western, Northern or Eastern
+    home_store_id: Store closest to the customer
+    accounts_merged: Number of CRM accounts merged into this customer
+    first_order_date: Date of the first completed order
+    acquisition_channel: Channel of the first completed order (STORE, WEB, APP, MARKETPLACE)
+    cohort_month: First day of the month of the first order ('YYYY-MM-01')
+    second_order_date: Date of the second completed order (NULL if none)
+    days_to_second_order: Days between first and second order
+    last_order_date: Date of the most recent completed order
+    total_orders: Completed orders to date
+    repurchased_within_90d: 1 if the second order came within 90 days of the first, 0 if not, NULL if the first order is less than 90 days before the reference date (window still open) or there is no order
+    is_active: 1 if the customer ordered in the 365 days up to the reference date (2026-10-31)
+
+dim_product:
+  description: Product catalog.
+  columns:
+    product_id: Product id (SKU)
+    product_name: Product name
+    category: Category
+    subcategory: Subcategory
+    brand: Brand
+    is_private_label: 1 if a Casa Ceiba own brand
+    list_price: Current list price (GTQ)
+    unit_cost: Unit cost (GTQ)
+    cost_imputed: 1 if the unit cost was missing in the catalog and imputed
+    launch_date: Date the product was launched
+
+dim_channel:
+  description: Sales channels.
+  columns:
+    channel_id: STORE, WEB, APP, MARKETPLACE
+    channel_name: Store, Web, App, Marketplace
+    channel_type: Offline (stores) or Online (web, app, marketplace)
+    launch_date: Date the channel started selling (app 2024-06-03, marketplace 2025-03-03)
+    commission_rate: Partner commission on net sales (0.15 for the marketplace)
+
+dim_store:
+  description: Physical stores.
+  columns:
+    store_id: Store id (ST01-ST07)
+    store_name: Store name
+    city: City
+    department: Department
+    region: Region
+    store_format: Flagship, Mall or Street
+    opened_date: Opening date
+
+dim_promotion:
+  description: Promotional campaigns.
+  columns:
+    promo_code: Promotion code (joins fct_order_lines.promo_code)
+    promo_name: Name (e.g. 'Black Friday 2025')
+    promo_type: Sitewide, Seasonal, Clearance, Category event, Channel launch, Product launch
+    discount_pct: Discount as a fraction (0.15 = 15%)
+    discount_band: "'10-19%', '20-29%' or '30% or more'"
+    is_deep_discount: 1 if the discount is 30% or more
+    start_date: First day
+    end_date: Last day
+    days: Duration in days
+    category_scope: Categories on promotion ('All' or a list)
+    channel_scope: Channels on promotion ('All' or a list)
+
+dim_promotion_scope:
+  description: One row per promotion x category x channel it applies to.
+  columns:
+    promo_code: Promotion
+    category: Category on promotion
+    channel_id: Channel on promotion
+
+dim_date:
+  description: Calendar, one row per day from 2024-01-01 to 2026-10-31.
+  columns:
+    date: Date 'YYYY-MM-DD' (join with order_date)
+    year: Year (integer)
+    quarter: Quarter number 1-4
+    year_quarter: Quarter label 'YYYY-Qn' (e.g. '2026-Q3')
+    quarter_start: First day of the quarter
+    month: Month number 1-12
+    year_month: "'YYYY-MM'"
+    month_start: First day of the month 'YYYY-MM-01'
+    month_name: January ... December
+    week_start: Monday of the week
+    day_of_week: 1 = Monday ... 7 = Sunday
+    day_name: Monday ... Sunday
+    is_weekend: 1 on Saturday and Sunday
+
+mart_sales_monthly:
+  description: Sales by month, channel and category (sums, so they re-aggregate). Fast for trends.
+  columns:
+    month_start: First day of the month
+    channel_id: Channel
+    category: Category
+    orders: Distinct orders with at least one line in the category (do not sum across categories, since an order can span several)
+    identified_customers: Distinct identified customers (do not sum across rows)
+    units: Units sold
+    gross_sales: Gross sales
+    discount_amount: Discounts
+    returned_amount: Refunds
+    net_sales: Net sales
+    cogs: Cost of goods
+    gross_margin: Gross margin
+    commission: Marketplace commission
+    contribution_margin: Contribution margin
+
+mart_category_quarterly:
+  description: Net sales by category and quarter with year-over-year and quarter-over-quarter growth.
+  columns:
+    year_quarter: "'YYYY-Qn'"
+    year: Year
+    quarter: Quarter number
+    category: Category
+    net_sales: Net sales
+    gross_margin: Gross margin
+    units: Units
+    net_sales_same_quarter_last_year: Net sales of the same quarter a year earlier
+    yoy_growth: net_sales / net_sales_same_quarter_last_year - 1 (fraction)
+    net_sales_previous_quarter: Net sales of the previous quarter
+    qoq_growth: net_sales / net_sales_previous_quarter - 1 (fraction)
+
+mart_customer_cohorts:
+  description: Retention by monthly acquisition cohort and acquisition channel.
+  columns:
+    cohort_month: Month of the customers' first order
+    acquisition_channel: Channel of the first order
+    months_since_first: 0 = the first month, 1 = the next month...
+    cohort_customers: Customers in the cohort (cohort_month x acquisition_channel)
+    active_customers: Cohort customers with at least one order in that month
+    retention_rate: active_customers / cohort_customers
+
+mart_repurchase:
+  description: 90-day repurchase rate by acquisition channel and cohort year.
+  columns:
+    acquisition_channel: Channel of the first order
+    cohort_year: Year of the first order
+    new_customers: Customers acquired
+    eligible_customers: Customers whose 90-day window has closed
+    repeat_customers: Eligible customers who ordered again within 90 days
+    repurchase_rate: repeat_customers / eligible_customers
+    avg_days_to_second_order: Average days to the second order (repeat customers)
+    avg_orders_per_customer: Average completed orders to date
+
+mart_promo_performance:
+  description: Performance of each promotion (sales lift, margin and after-effect) against a baseline.
+  columns:
+    promo_code: Promotion
+    promo_name: Name
+    promo_type: Type
+    discount_pct: Discount (fraction)
+    discount_band: Discount band
+    is_deep_discount: 1 if 30% or more
+    start_date: Start
+    end_date: End
+    days: Duration
+    category_scope: Categories on promotion
+    channel_scope: Channels on promotion
+    method: How the lift was measured (difference-in-differences or before/during)
+    baseline_days: Days in the baseline (28 days before, minus days with overlapping promotions)
+    baseline_daily_net_sales: Daily net sales of the promoted scope before the promotion
+    promo_daily_net_sales: Daily net sales of the promoted scope during the promotion
+    simple_net_sales_lift: promo / baseline - 1
+    comparison_change: Change of the comparison categories over the same days
+    net_sales_lift: Lift net of the comparison change (fraction)
+    units_lift: Unit lift (fraction, before vs during)
+    baseline_margin_pct: Gross margin % before
+    promo_margin_pct: Gross margin % during
+    incremental_gross_margin: Extra gross margin earned during the promotion vs the baseline (GTQ, negative = the promotion cost margin)
+    after_vs_baseline: Sales in the 21 days after vs the baseline (negative = demand pulled forward)
+
+mart_kpi_summary:
+  description: Headline KPIs, year to date (2026-01-01 to 2026-10-31) vs the same period of 2025.
+  columns:
+    sort: Display order
+    kpi: KPI name
+    current_period: Period covered
+    current_value: Value this year to date
+    prior_year_value: Value in the same period last year
+    change: current / prior - 1
+
+ref_parameters:
+  description: One row with the business rules and the reference date of the data.
+  columns:
+    period_start: First date in the data (2024-01-01)
+    period_end: Last date in the data (2026-10-31)
+    as_of_date: The reference "today" for relative periods (2026-10-31)
+    local_utc_offset_hours: Guatemala time offset (-6)
+    repurchase_window_days: 90
+    active_window_days: 365
+    currency: GTQ

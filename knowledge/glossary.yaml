@@ -1,0 +1,227 @@
+# Business glossary: how Casa Ceiba defines its metrics and periods.
+# The assistant retrieves the entries relevant to each question (BM25 over term, aliases and definition)
+# and puts them in the prompt, so the SQL it writes uses the company's definitions, not generic ones.
+# Entries with `always: true` go into every prompt.
+# Aliases include Spanish terms, so a question in Spanish finds the same definitions.
+
+- id: reference_date
+  always: true
+  term: Reference date and relative periods
+  aliases: [today, now, current, latest, hoy, actual, último, ultimo, reciente, last, this year, este año]
+  definition: >
+    The data runs from 2024-01-01 to 2026-10-31. The reference "today" is 2026-10-31 (ref_parameters.as_of_date).
+    Never use 'now', CURRENT_DATE or the clock. "This year" / "year to date" = 2026-01-01 to 2026-10-31.
+    "Last year" for comparisons = the same dates one year earlier (2025-01-01 to 2025-10-31) unless the user
+    asks for the full year 2025. "Last quarter" = the last complete quarter = 2026-Q3 (Jul-Sep 2026).
+    "This quarter" = 2026-Q4, which only has October. "Last month" = the last complete month = October 2026.
+    "Last 12 months" = 2025-11-01 to 2026-10-31.
+  sql: "SELECT as_of_date FROM ref_parameters  -- '2026-10-31'"
+
+- id: sqlite_conventions
+  always: true
+  term: SQL conventions (SQLite)
+  aliases: [sql, query, sqlite, consulta]
+  definition: >
+    The warehouse is SQLite. Dates are TEXT 'YYYY-MM-DD'; use DATE(), STRFTIME() and JULIANDAY(), or join
+    dim_date for year, quarter (year_quarter = '2026-Q3'), month_start and month names. Divide with a REAL
+    (1.0 * a / b) to avoid integer division. Return ratios as percentages rounded to one decimal with a
+    _pct suffix (ROUND(100.0 * a / b, 1) AS repurchase_rate_pct) and money rounded to 2 decimals. Give
+    columns readable snake_case names. Sort results in a meaningful order (time ascending, rankings descending).
+    Prefer the marts when they answer the question; use fct_order_lines for anything they do not cover.
+  sql: "SELECT d.year_quarter, ROUND(SUM(l.net_sales), 2) AS net_sales FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date GROUP BY 1 ORDER BY 1"
+
+- id: net_sales
+  term: Net sales
+  aliases: [sales, revenue, net revenue, ventas, ventas netas, ingresos, facturación, facturacion, vendimos, vendió, vendio]
+  definition: >
+    The official sales figure. Net sales = gross sales - promotional discounts - refunds for returns, from
+    completed orders only. Returns are attributed to the original order date. Use SUM(net_sales) from
+    fct_order_lines, fct_orders or mart_sales_monthly. "Sales" or "revenue" without qualification means net sales.
+  sql: "SUM(net_sales)"
+
+- id: gross_sales
+  term: Gross sales
+  aliases: [gross revenue, ventas brutas, list price sales]
+  definition: Gross sales = quantity x list price, before discounts and returns. SUM(gross_sales).
+  sql: "SUM(gross_sales)"
+
+- id: discounts
+  term: Discounts and discount rate
+  aliases: [discount, discount rate, markdown, descuento, descuentos, tasa de descuento, rebajas]
+  definition: >
+    Discounts are promotional price reductions (discount_amount). Discount rate = discounts / gross sales.
+  sql: "ROUND(100.0 * SUM(discount_amount) / SUM(gross_sales), 1) AS discount_rate_pct"
+
+- id: returns
+  term: Returns and return rate
+  aliases: [return, returns, refund, refunds, return rate, devolución, devoluciones, tasa de devolución, reembolsos]
+  definition: >
+    Return rate = refunds / sales after discount = SUM(returned_amount) / SUM(gross_sales - discount_amount),
+    from fct_order_lines, by the date of the original order. A unit return rate is
+    SUM(returned_quantity) / SUM(quantity). Return reasons and return dates are in fct_returns.
+  sql: "ROUND(100.0 * SUM(returned_amount) / SUM(gross_sales - discount_amount), 1) AS return_rate_pct"
+
+- id: gross_margin
+  term: Gross margin and margin %
+  aliases: [margin, profit, gross profit, margin percent, margen, margen bruto, utilidad, rentabilidad, ganancia]
+  definition: >
+    Gross margin = net sales - cost of goods kept by the customer (cogs). Gross margin % = SUM(gross_margin) /
+    SUM(net_sales). Always compute a margin % as a ratio of sums, never as an average of line percentages.
+    "Margin" without qualification means gross margin %.
+  sql: "ROUND(100.0 * SUM(gross_margin) / SUM(net_sales), 1) AS gross_margin_pct"
+
+- id: contribution_margin
+  term: Contribution margin
+  aliases: [contribution, commission, marketplace fee, margen de contribución, comisión, comision]
+  definition: >
+    Contribution margin = gross margin - marketplace commission (15% of net sales on MARKETPLACE, zero elsewhere).
+    Use it to compare channel profitability. Contribution margin % = SUM(contribution_margin) / SUM(net_sales).
+  sql: "ROUND(100.0 * SUM(contribution_margin) / SUM(net_sales), 1) AS contribution_margin_pct"
+
+- id: orders
+  term: Orders
+  aliases: [order, orders, transactions, tickets, pedidos, órdenes, ordenes, compras, transacciones]
+  definition: >
+    An order is a completed online order or a store ticket. Count orders with COUNT(*) on fct_orders or
+    COUNT(DISTINCT order_id) on fct_order_lines. Do not sum mart_sales_monthly.orders across categories
+    (one order can contain several categories).
+  sql: "COUNT(DISTINCT order_id) AS orders"
+
+- id: aov
+  term: Average order value (AOV)
+  aliases: [aov, average order value, average ticket, basket size, ticket promedio, valor promedio de la orden, ticket medio]
+  definition: AOV = net sales / number of orders, computed on fct_orders as SUM(net_sales) / COUNT(*).
+  sql: "ROUND(SUM(net_sales) / COUNT(*), 2) AS avg_order_value"
+
+- id: units
+  term: Units and units per order
+  aliases: [units, items, quantity, unidades, artículos, articulos, piezas, units per transaction, upt]
+  definition: Units = SUM(quantity). Units per order = SUM(units) / COUNT(*) on fct_orders.
+  sql: "SUM(quantity) AS units"
+
+- id: identified_orders
+  term: Identified customers vs guest shoppers
+  aliases: [guest, anonymous, loyalty card, identified, invitado, anónimo, anonimo, tarjeta de lealtad]
+  definition: >
+    Online orders always have a customer. Store shoppers who do not scan a loyalty card have customer_id NULL.
+    Every customer metric (customers, new customers, repurchase, retention, active customers) only counts
+    identified customers; sales metrics include everyone.
+  sql: "COUNT(DISTINCT customer_id)  -- ignores NULL guests"
+
+- id: customers
+  term: Customers (buying customers)
+  aliases: [customers, buyers, shoppers, clients, clientes, compradores, cuántos clientes, cuantos clientes]
+  definition: >
+    Customers in a period = distinct identified customers with at least one completed order in that period:
+    COUNT(DISTINCT customer_id) on fct_orders filtered by order_date. Registered accounts without orders are
+    not customers unless the user asks about registrations (dim_customer.signup_date).
+  sql: "COUNT(DISTINCT customer_id) AS customers"
+
+- id: new_customers
+  term: New customers and acquisition channel
+  aliases: [new customers, acquisition, acquired, first order, first purchase, clientes nuevos, nuevos clientes, adquisición, primera compra, canal de adquisición]
+  definition: >
+    A new customer is counted on the date of their first completed order (dim_customer.first_order_date, or
+    fct_orders.customer_order_number = 1). The acquisition channel is the channel of that first order
+    (dim_customer.acquisition_channel). The cohort is the month of the first order (dim_customer.cohort_month).
+  sql: "SELECT acquisition_channel, COUNT(*) AS new_customers FROM dim_customer WHERE first_order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY 1"
+
+- id: active_customers
+  term: Active customer
+  aliases: [active, active customers, active base, clientes activos, cliente activo, base activa]
+  definition: >
+    An active customer has at least one completed order in the 365 days up to the reference date
+    (2025-11-01 to 2026-10-31). Use dim_customer.is_active = 1. For "active in a given month/quarter", count
+    distinct customers with orders in that period instead.
+  sql: "SELECT COUNT(*) FROM dim_customer WHERE is_active = 1"
+
+- id: repurchase_rate
+  term: Repurchase rate (repeat rate)
+  aliases: [repurchase, repeat, repeat rate, repeat customers, buy again, second order, recompra, tasa de recompra, recurrencia, volvieron a comprar, clientes recurrentes]
+  definition: >
+    Repurchase rate = share of new customers who place a second order within 90 days of their first order.
+    Only customers whose 90-day window has closed count (dim_customer.repurchased_within_90d is NULL while it
+    is open), so it is AVG(repurchased_within_90d). "By channel" means by acquisition channel (the channel of
+    the first order), and the second order may be in any channel. Pre-aggregated in mart_repurchase.
+  sql: "SELECT acquisition_channel, ROUND(100.0 * AVG(repurchased_within_90d), 1) AS repurchase_rate_pct FROM dim_customer WHERE repurchased_within_90d IS NOT NULL GROUP BY 1"
+
+- id: retention
+  term: Retention and cohorts
+  aliases: [retention, cohort, cohorts, churn, retained, retención, retencion, cohorte, cohortes, abandono, fuga]
+  definition: >
+    Month-k retention of a cohort = share of the customers acquired in a month who order again in the k-th
+    month after it (month 0 = the first month). mart_customer_cohorts has it by cohort_month and
+    acquisition_channel; combine channels as SUM(active_customers) / SUM(cohort_customers) over rows with the
+    same cohort and months_since_first. Churned = not active (no order in the last 365 days).
+  sql: "SELECT months_since_first, ROUND(100.0 * SUM(active_customers) / SUM(cohort_customers), 1) AS retention_pct FROM mart_customer_cohorts WHERE cohort_month LIKE '2025-%' GROUP BY 1"
+
+- id: purchase_frequency
+  term: Purchase frequency and time between orders
+  aliases: [frequency, orders per customer, time between orders, frecuencia, frecuencia de compra, días entre compras]
+  definition: >
+    Orders per customer in a period = COUNT(*) / COUNT(DISTINCT customer_id) on identified orders.
+    Days between orders = AVG(days_since_previous_order) on fct_orders. Lifetime orders = dim_customer.total_orders.
+  sql: "ROUND(1.0 * COUNT(*) / COUNT(DISTINCT customer_id), 2) AS orders_per_customer"
+
+- id: growth
+  term: Growth (year over year, quarter over quarter)
+  aliases: [growth, grew, increase, change, trend, crecimiento, creció, crecio, aumentó, aumento, variación, variacion, tendencia, yoy, qoq]
+  definition: >
+    Growth = current period / comparison period - 1. Unless the user says "versus the previous quarter/month",
+    compare with the same period of the previous year (year over year), because sales are seasonal.
+    "Which category grew most last quarter" = highest YoY growth of net sales in 2026-Q3 vs 2025-Q3.
+    mart_category_quarterly has yoy_growth and qoq_growth by category.
+  sql: "SELECT category, ROUND(100.0 * yoy_growth, 1) AS yoy_growth_pct FROM mart_category_quarterly WHERE year_quarter = '2026-Q3' ORDER BY yoy_growth DESC"
+
+- id: channels
+  term: Channels
+  aliases: [channel, online, offline, store, stores, web, website, app, mobile, marketplace, canal, canales, tienda, tiendas, en línea, en linea, aplicación, aplicacion, sitio web]
+  definition: >
+    channel_id is STORE (7 physical stores), WEB, APP (launched 2024-06-03) or MARKETPLACE (third-party,
+    launched 2025-03-03, 15% commission). Online = WEB + APP + MARKETPLACE (dim_channel.channel_type = 'Online').
+    Store-level questions use fct_orders.store_id joined to dim_store.
+  sql: "SELECT channel_id, ROUND(SUM(net_sales), 2) AS net_sales FROM fct_orders GROUP BY 1"
+
+- id: categories
+  term: Categories and private label
+  aliases: [category, categories, department, product line, private label, own brand, categoría, categoria, categorías, marca propia, línea de producto]
+  definition: >
+    Six categories: Electronics, Home & Kitchen, Fashion, Beauty, Sports & Outdoors, Toys & Kids (columns
+    fct_order_lines.category, dim_product.category). Private label (own brands Ceiba Home, Ceiba Studio and
+    the skincare line Ceiba Botánica launched 2026-03-16) is is_private_label = 1.
+  sql: "SELECT category, ROUND(SUM(net_sales), 2) AS net_sales FROM fct_order_lines GROUP BY 1 ORDER BY 2 DESC"
+
+- id: promotions
+  term: Promotions and promotion effect
+  aliases: [promotion, promotions, promo, campaign, black friday, cyber monday, clearance, lift, promoción, promociones, campaña, viernes negro, liquidación, efecto de promociones]
+  definition: >
+    Promotions are in dim_promotion (discount_pct as a fraction, discount_band, dates, scope). A line sold on
+    promotion has a promo_code (is_promo = 1). Promotion share of sales = net sales with is_promo = 1 / all net
+    sales. The effect of a promotion (lift vs baseline, margin during it, incremental gross margin, demand
+    pulled forward afterwards) is precomputed in mart_promo_performance; use it for "did the promotion work".
+  sql: "SELECT promo_name, ROUND(100.0 * net_sales_lift, 1) AS lift_pct, ROUND(incremental_gross_margin, 2) AS incremental_gross_margin FROM mart_promo_performance ORDER BY start_date"
+
+- id: stores
+  term: Stores and regions
+  aliases: [store performance, branch, region, department, city, sucursal, sucursales, región, region, departamento, ciudad]
+  definition: >
+    Store sales: fct_orders WHERE channel_id = 'STORE', joined to dim_store on store_id (store_name, city,
+    department, region, store_format). Customer geography: dim_customer.department and region.
+  sql: "SELECT s.store_name, ROUND(SUM(o.net_sales), 2) AS net_sales FROM fct_orders o JOIN dim_store s ON s.store_id = o.store_id GROUP BY 1 ORDER BY 2 DESC"
+
+- id: seasonality
+  term: Seasonality and key dates
+  aliases: [season, seasonality, peak, black friday, christmas, mother's day, bono 14, temporada, estacionalidad, navidad, día de la madre, quincena]
+  definition: >
+    Sales peak on Black Friday weekend (late November) and in December; Mother's Day (May 10) and back to
+    school (January) are smaller peaks. Bono 14 (mid-July bonus) and paydays (15th and last day of each month)
+    lift sales. Compare seasonal periods year over year.
+  sql: "SELECT d.month_name, ROUND(SUM(l.net_sales), 2) AS net_sales FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date WHERE d.year = 2025 GROUP BY d.month, d.month_name ORDER BY d.month"
+
+- id: share
+  term: Share / mix
+  aliases: [share, mix, percentage of, proportion, participación, participacion, porcentaje, mezcla, peso]
+  definition: >
+    Share of a total = part / total, e.g. channel share of net sales = SUM(net_sales) per channel /
+    SUM(net_sales) over all channels. Use a window function: 100.0 * SUM(x) / SUM(SUM(x)) OVER ().
+  sql: "ROUND(100.0 * SUM(net_sales) / SUM(SUM(net_sales)) OVER (), 1) AS share_pct"

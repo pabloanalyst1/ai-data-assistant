@@ -1,0 +1,229 @@
+# Evaluation set: 25 business questions with a gold SQL query whose result is the correct answer.
+# scripts/run_eval.py asks the assistant each question, runs its SQL and compares the result with the
+# gold result (execution accuracy). Five questions are in Spanish.
+#
+# compare:
+#   set        the same rows (any order); each gold column must match some column of the answer
+#   first_row  the answer's first row must contain the gold row's values ("which ... most?" questions)
+#   values     every gold value must appear somewhere in a small answer (headline numbers, any layout)
+# Numbers match within rounding (0.5% or 0.05), and a fraction matches the same percentage (0.235 = 23.5).
+# alt_gold_sql lists other answers that are also correct (e.g. a month given by name instead of 'YYYY-MM').
+
+- id: q01
+  question: ¿Qué categoría creció más el último trimestre?
+  compare: first_row
+  tags: [growth, category, relative-period, spanish]
+  gold_sql: |
+    SELECT category FROM mart_category_quarterly
+    WHERE year_quarter = '2026-Q3' ORDER BY yoy_growth DESC LIMIT 1
+
+- id: q02
+  question: ¿Cuál es la tasa de recompra por canal?
+  compare: set
+  tags: [repurchase, channel, glossary, spanish]
+  gold_sql: |
+    SELECT acquisition_channel, ROUND(100.0 * AVG(repurchased_within_90d), 1) AS repurchase_rate_pct
+    FROM dim_customer WHERE repurchased_within_90d IS NOT NULL GROUP BY acquisition_channel
+
+- id: q03
+  question: How much did we sell this year compared with the same period last year?
+  compare: values
+  tags: [net-sales, ytd, relative-period]
+  gold_sql: |
+    SELECT ROUND(SUM(CASE WHEN order_date BETWEEN '2026-01-01' AND '2026-10-31' THEN net_sales END), 2) AS net_sales_2026_ytd,
+           ROUND(SUM(CASE WHEN order_date BETWEEN '2025-01-01' AND '2025-10-31' THEN net_sales END), 2) AS net_sales_2025_ytd
+    FROM fct_orders
+
+- id: q04
+  question: ¿Cuáles fueron las ventas netas por canal en 2025?
+  compare: set
+  tags: [net-sales, channel, spanish]
+  gold_sql: |
+    SELECT channel_id, ROUND(SUM(net_sales), 2) AS net_sales
+    FROM fct_orders WHERE order_date BETWEEN '2025-01-01' AND '2025-12-31' GROUP BY channel_id
+
+- id: q05
+  question: What is the gross margin % by category this year?
+  compare: set
+  tags: [margin, category, ytd]
+  gold_sql: |
+    SELECT category, ROUND(100.0 * SUM(gross_margin) / SUM(net_sales), 1) AS gross_margin_pct
+    FROM fct_order_lines WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY category
+
+- id: q06
+  question: What is the average order value by channel in 2026?
+  compare: set
+  tags: [aov, channel]
+  gold_sql: |
+    SELECT channel_id, ROUND(SUM(net_sales) / COUNT(*), 2) AS avg_order_value
+    FROM fct_orders WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY channel_id
+
+- id: q07
+  question: How many active customers do we have?
+  compare: values
+  tags: [active-customers, glossary]
+  gold_sql: SELECT COUNT(*) AS active_customers FROM dim_customer WHERE is_active = 1
+
+- id: q08
+  question: Which store had the highest net sales last quarter?
+  compare: first_row
+  tags: [stores, relative-period]
+  gold_sql: |
+    SELECT s.store_name FROM fct_orders o JOIN dim_store s ON s.store_id = o.store_id
+    JOIN dim_date d ON d.date = o.order_date WHERE d.year_quarter = '2026-Q3'
+    GROUP BY s.store_name ORDER BY SUM(o.net_sales) DESC LIMIT 1
+  alt_gold_sql:
+    - |
+      SELECT o.store_id FROM fct_orders o JOIN dim_date d ON d.date = o.order_date
+      WHERE d.year_quarter = '2026-Q3' AND o.store_id IS NOT NULL
+      GROUP BY o.store_id ORDER BY SUM(o.net_sales) DESC LIMIT 1
+
+- id: q09
+  question: What is the return rate by category?
+  compare: set
+  tags: [returns, category, glossary]
+  gold_sql: |
+    SELECT category, ROUND(100.0 * SUM(returned_amount) / SUM(gross_sales - discount_amount), 1) AS return_rate_pct
+    FROM fct_order_lines GROUP BY category
+
+- id: q10
+  question: Show monthly net sales for 2025.
+  compare: set
+  tags: [net-sales, trend]
+  gold_sql: |
+    SELECT d.month_start, ROUND(SUM(l.net_sales), 2) AS net_sales
+    FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date
+    WHERE d.year = 2025 GROUP BY d.month_start
+
+- id: q11
+  question: How many new customers did each channel acquire in 2026?
+  compare: set
+  tags: [new-customers, acquisition, channel]
+  gold_sql: |
+    SELECT acquisition_channel, COUNT(*) AS new_customers
+    FROM dim_customer WHERE first_order_date BETWEEN '2026-01-01' AND '2026-10-31'
+    GROUP BY acquisition_channel
+
+- id: q12
+  question: What share of net sales came from online channels in 2026?
+  compare: values
+  tags: [share, channel]
+  gold_sql: |
+    SELECT ROUND(100.0 * SUM(CASE WHEN channel_id <> 'STORE' THEN net_sales END) / SUM(net_sales), 1) AS online_share_pct
+    FROM fct_orders WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31'
+
+- id: q13
+  question: Which promotion generated the most incremental gross margin?
+  compare: first_row
+  tags: [promotions]
+  gold_sql: |
+    SELECT promo_name FROM mart_promo_performance ORDER BY incremental_gross_margin DESC LIMIT 1
+  alt_gold_sql:
+    - SELECT promo_code FROM mart_promo_performance ORDER BY incremental_gross_margin DESC LIMIT 1
+
+- id: q14
+  question: What percentage of net sales was sold on promotion each year?
+  compare: set
+  tags: [promotions, share]
+  gold_sql: |
+    SELECT d.year, ROUND(100.0 * SUM(CASE WHEN l.is_promo = 1 THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS promo_share_pct
+    FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date GROUP BY d.year
+
+- id: q15
+  question: What is the 3-month retention of customers acquired in January 2025?
+  compare: values
+  tags: [retention, cohort, glossary]
+  gold_sql: |
+    SELECT ROUND(100.0 * SUM(active_customers) / SUM(cohort_customers), 1) AS month_3_retention_pct
+    FROM mart_customer_cohorts WHERE cohort_month = '2025-01-01' AND months_since_first = 3
+
+- id: q16
+  question: ¿Cuál es el ticket promedio en tiendas físicas frente a los canales en línea en 2026?
+  compare: set
+  tags: [aov, channel, spanish]
+  gold_sql: |
+    SELECT c.channel_type, ROUND(SUM(o.net_sales) / COUNT(*), 2) AS avg_order_value
+    FROM fct_orders o JOIN dim_channel c ON c.channel_id = o.channel_id
+    WHERE o.order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY c.channel_type
+
+- id: q17
+  question: What were the top 5 products by net sales in 2026?
+  compare: set
+  tags: [products, ranking]
+  gold_sql: |
+    SELECT p.product_name, ROUND(SUM(l.net_sales), 2) AS net_sales
+    FROM fct_order_lines l JOIN dim_product p ON p.product_id = l.product_id
+    WHERE l.order_date BETWEEN '2026-01-01' AND '2026-10-31'
+    GROUP BY p.product_name ORDER BY SUM(l.net_sales) DESC LIMIT 5
+
+- id: q18
+  question: How many orders did we have in October 2026, and how does that compare with October 2025?
+  compare: values
+  tags: [orders, comparison]
+  gold_sql: |
+    SELECT SUM(order_date BETWEEN '2026-10-01' AND '2026-10-31') AS orders_oct_2026,
+           SUM(order_date BETWEEN '2025-10-01' AND '2025-10-31') AS orders_oct_2025
+    FROM fct_orders
+
+- id: q19
+  question: What is the contribution margin % by channel in 2026?
+  compare: set
+  tags: [contribution-margin, channel, glossary]
+  gold_sql: |
+    SELECT channel_id, ROUND(100.0 * SUM(contribution_margin) / SUM(net_sales), 1) AS contribution_margin_pct
+    FROM fct_orders WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY channel_id
+
+- id: q20
+  question: Which department has the most active customers?
+  compare: first_row
+  tags: [active-customers, geography]
+  gold_sql: |
+    SELECT department FROM dim_customer WHERE is_active = 1
+    GROUP BY department ORDER BY COUNT(*) DESC LIMIT 1
+
+- id: q21
+  question: What were Beauty net sales by quarter in 2026?
+  compare: set
+  tags: [net-sales, category, trend]
+  gold_sql: |
+    SELECT d.year_quarter, ROUND(SUM(l.net_sales), 2) AS net_sales
+    FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date
+    WHERE l.category = 'Beauty' AND d.year = 2026 GROUP BY d.year_quarter
+
+- id: q22
+  question: ¿Qué porcentaje de las ventas netas de Belleza en 2026 vino de productos de marca propia?
+  compare: values
+  tags: [private-label, share, spanish]
+  gold_sql: |
+    SELECT ROUND(100.0 * SUM(CASE WHEN is_private_label = 1 THEN net_sales ELSE 0 END) / SUM(net_sales), 1) AS private_label_share_pct
+    FROM fct_order_lines WHERE category = 'Beauty' AND order_date BETWEEN '2026-01-01' AND '2026-10-31'
+
+- id: q23
+  question: What are the three most common return reasons for online orders, by number of returns?
+  compare: set
+  tags: [returns]
+  gold_sql: |
+    SELECT reason, COUNT(*) AS returns
+    FROM fct_returns WHERE channel_id <> 'STORE'
+    GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 3
+
+- id: q24
+  question: Among customers who placed a second order, what is the average number of days between their first and second order, by acquisition channel?
+  compare: set
+  tags: [frequency, acquisition]
+  gold_sql: |
+    SELECT acquisition_channel, ROUND(AVG(days_to_second_order), 1) AS avg_days_to_second_order
+    FROM dim_customer WHERE second_order_date IS NOT NULL GROUP BY acquisition_channel
+
+- id: q25
+  question: Which month of 2025 had the highest net sales?
+  compare: first_row
+  tags: [net-sales, seasonality]
+  gold_sql: |
+    SELECT STRFTIME('%Y-%m', order_date) AS month FROM fct_orders
+    WHERE order_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY 1 ORDER BY SUM(net_sales) DESC LIMIT 1
+  alt_gold_sql:
+    - |
+      SELECT d.month_name FROM fct_orders o JOIN dim_date d ON d.date = o.order_date
+      WHERE d.year = 2025 GROUP BY d.month_name ORDER BY SUM(o.net_sales) DESC LIMIT 1

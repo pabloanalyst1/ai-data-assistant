@@ -1,0 +1,48 @@
+name: Evaluate with an LLM
+
+# Manual run: Actions -> "Evaluate with an LLM" -> Run workflow.
+# Needs the repository secret ANTHROPIC_API_KEY (or OPENAI_API_KEY for provider "openai").
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "LLM provider"
+        type: choice
+        options: [anthropic, openai]
+        default: anthropic
+      model:
+        description: "Model (empty = default)"
+        required: false
+        default: ""
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Build the warehouse
+        run: python run_pipeline.py
+
+      - name: Run the 25-question evaluation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_MODEL: ${{ inputs.model }}
+        run: python scripts/run_eval.py --provider ${{ inputs.provider }}
+
+      - name: Upload results (commit eval/results_*.json, docs/eval_results.md and README.md to publish them)
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            eval/results_*.json
+            docs/eval_results.md
+            README.md

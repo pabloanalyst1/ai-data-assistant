@@ -1,0 +1,155 @@
+# Worked examples (question -> SQL). The assistant retrieves the most similar ones for each question and
+# shows them to the LLM as few-shot examples. They are deliberately different from the evaluation set
+# (eval/questions.yaml), so the evaluation measures generalisation, not copying.
+
+- question: What were net sales by quarter?
+  sql: |
+    SELECT d.year_quarter, ROUND(SUM(l.net_sales), 2) AS net_sales
+    FROM fct_order_lines l
+    JOIN dim_date d ON d.date = l.order_date
+    GROUP BY d.year_quarter
+    ORDER BY d.year_quarter
+
+- question: Net sales by store in 2025
+  sql: |
+    SELECT s.store_name, s.city, ROUND(SUM(o.net_sales), 2) AS net_sales
+    FROM fct_orders o
+    JOIN dim_store s ON s.store_id = o.store_id
+    WHERE o.order_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY s.store_name, s.city
+    ORDER BY net_sales DESC
+
+- question: How many orders and buying customers did we have each month in 2026?
+  sql: |
+    SELECT d.month_start, COUNT(*) AS orders, COUNT(DISTINCT o.customer_id) AS customers
+    FROM fct_orders o
+    JOIN dim_date d ON d.date = o.order_date
+    WHERE d.year = 2026
+    GROUP BY d.month_start
+    ORDER BY d.month_start
+
+- question: What was the gross margin % by channel in 2025?
+  sql: |
+    SELECT channel_id, ROUND(100.0 * SUM(gross_margin) / SUM(net_sales), 1) AS gross_margin_pct
+    FROM fct_orders
+    WHERE order_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY channel_id
+    ORDER BY gross_margin_pct DESC
+
+- question: What is the repurchase rate by customer region?
+  sql: |
+    SELECT region, COUNT(*) AS eligible_customers,
+           ROUND(100.0 * AVG(repurchased_within_90d), 1) AS repurchase_rate_pct
+    FROM dim_customer
+    WHERE repurchased_within_90d IS NOT NULL
+    GROUP BY region
+    ORDER BY repurchase_rate_pct DESC
+
+- question: Which subcategories grew the most in 2026-Q2 compared with 2025-Q2?
+  sql: |
+    WITH q AS (
+        SELECT l.subcategory, d.year_quarter, SUM(l.net_sales) AS net_sales
+        FROM fct_order_lines l
+        JOIN dim_date d ON d.date = l.order_date
+        WHERE d.year_quarter IN ('2025-Q2', '2026-Q2')
+        GROUP BY 1, 2
+    )
+    SELECT subcategory,
+           ROUND(SUM(CASE WHEN year_quarter = '2026-Q2' THEN net_sales END), 2) AS net_sales_2026_q2,
+           ROUND(SUM(CASE WHEN year_quarter = '2025-Q2' THEN net_sales END), 2) AS net_sales_2025_q2,
+           ROUND(100.0 * (SUM(CASE WHEN year_quarter = '2026-Q2' THEN net_sales END)
+                 / SUM(CASE WHEN year_quarter = '2025-Q2' THEN net_sales END) - 1), 1) AS yoy_growth_pct
+    FROM q
+    GROUP BY subcategory
+    ORDER BY yoy_growth_pct DESC
+
+- question: What is the return rate by channel in 2026?
+  sql: |
+    SELECT channel_id,
+           ROUND(100.0 * SUM(returned_amount) / SUM(gross_sales - discount_amount), 1) AS return_rate_pct
+    FROM fct_order_lines
+    WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31'
+    GROUP BY channel_id
+    ORDER BY return_rate_pct DESC
+
+- question: Do deeper discounts pay off? Lift and incremental margin by discount band
+  sql: |
+    SELECT discount_band, COUNT(*) AS promotions,
+           ROUND(100.0 * AVG(net_sales_lift), 1) AS avg_net_sales_lift_pct,
+           ROUND(SUM(incremental_gross_margin), 2) AS incremental_gross_margin,
+           ROUND(100.0 * AVG(after_vs_baseline), 1) AS avg_sales_after_vs_baseline_pct
+    FROM mart_promo_performance
+    GROUP BY discount_band
+    ORDER BY discount_band
+
+- question: What is month-6 retention for the 2025 cohorts by acquisition channel?
+  sql: |
+    SELECT acquisition_channel,
+           ROUND(100.0 * SUM(active_customers) / SUM(cohort_customers), 1) AS month_6_retention_pct
+    FROM mart_customer_cohorts
+    WHERE cohort_month BETWEEN '2025-01-01' AND '2025-12-01' AND months_since_first = 6
+    GROUP BY acquisition_channel
+    ORDER BY month_6_retention_pct DESC
+
+- question: What share of net sales does each channel have, year by year?
+  sql: |
+    SELECT d.year, o.channel_id,
+           ROUND(100.0 * SUM(o.net_sales) / SUM(SUM(o.net_sales)) OVER (PARTITION BY d.year), 1) AS share_pct
+    FROM fct_orders o
+    JOIN dim_date d ON d.date = o.order_date
+    GROUP BY d.year, o.channel_id
+    ORDER BY d.year, share_pct DESC
+
+- question: Who are our top 10 customers by lifetime net sales?
+  sql: |
+    SELECT o.customer_id, c.acquisition_channel, COUNT(*) AS orders, ROUND(SUM(o.net_sales), 2) AS net_sales
+    FROM fct_orders o
+    JOIN dim_customer c ON c.customer_id = o.customer_id
+    GROUP BY o.customer_id, c.acquisition_channel
+    ORDER BY net_sales DESC
+    LIMIT 10
+
+- question: How many new customers did we acquire each month in 2025?
+  sql: |
+    SELECT cohort_month, COUNT(*) AS new_customers
+    FROM dim_customer
+    WHERE first_order_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY cohort_month
+    ORDER BY cohort_month
+
+- question: Weekend vs weekday net sales per day in 2026
+  sql: |
+    SELECT CASE WHEN d.is_weekend = 1 THEN 'Weekend' ELSE 'Weekday' END AS day_type,
+           COUNT(DISTINCT d.date) AS days,
+           ROUND(SUM(l.net_sales) / COUNT(DISTINCT d.date), 2) AS net_sales_per_day
+    FROM fct_order_lines l
+    JOIN dim_date d ON d.date = l.order_date
+    WHERE d.year = 2026
+    GROUP BY day_type
+
+- question: How many Ceiba Botánica units have we sold each month since the launch?
+  sql: |
+    SELECT d.month_start, SUM(l.quantity) AS units, ROUND(SUM(l.net_sales), 2) AS net_sales
+    FROM fct_order_lines l
+    JOIN dim_date d ON d.date = l.order_date
+    WHERE l.brand = 'Ceiba Botánica'
+    GROUP BY d.month_start
+    ORDER BY d.month_start
+
+- question: Net sales and gross margin % during each Black Friday promotion
+  sql: |
+    SELECT p.promo_name, ROUND(SUM(l.net_sales), 2) AS net_sales,
+           ROUND(100.0 * SUM(l.gross_margin) / SUM(l.net_sales), 1) AS gross_margin_pct
+    FROM fct_order_lines l
+    JOIN dim_promotion p ON p.promo_code = l.promo_code
+    WHERE p.promo_name LIKE 'Black Friday%'
+    GROUP BY p.promo_name
+    ORDER BY p.promo_name
+
+- question: ¿Cuántos clientes activos hay por región?
+  sql: |
+    SELECT region, COUNT(*) AS active_customers
+    FROM dim_customer
+    WHERE is_active = 1
+    GROUP BY region
+    ORDER BY active_customers DESC
