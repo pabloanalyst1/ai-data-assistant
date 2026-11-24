@@ -6,6 +6,8 @@ looks up the company's metric definitions (RAG), writes a SQLite query, a **guar
 approved tables only, row and time limits) before it runs, and the answer comes back as a short explanation,
 a table and a chart. A **25-question evaluation set** with known answers measures how often it is right.
 
+**[▶ Live demo: ai-data-assistant09.streamlit.app](https://ai-data-assistant09.streamlit.app)** · no install needed, ask in English or Spanish (if the app is asleep, click *Wake up* and wait about a minute)
+
 Underneath is the same kind of pipeline as my other projects: four messy source systems (POS, e-commerce,
 CRM, catalog) cleaned by a layered SQL warehouse with quality checks, plus a business analysis of channels,
 categories, retention and promotions.
@@ -123,6 +125,8 @@ or run the **Evaluate with an LLM** workflow in GitHub Actions: it uses the repo
 results, so the table above updates by itself.
 
 ## The app
+
+**Live:** [ai-data-assistant09.streamlit.app](https://ai-data-assistant09.streamlit.app) (hosted on Streamlit Community Cloud, answering with Claude). To run it locally:
 
 ```bash
 streamlit run app/streamlit_app.py
