@@ -1,0 +1,347 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-5-5",
+  "date": "2026-11-24",
+  "accuracy": 0.96,
+  "correct": 24,
+  "total": 25,
+  "results": [
+    {
+      "id": "q01",
+      "question": "¿Qué categoría creció más el último trimestre?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT category, ROUND(net_sales, 2) AS net_sales_2026_q3, ROUND(net_sales_same_quarter_last_year, 2) AS net_sales_2025_q3, ROUND(100.0 * yoy_growth, 1) AS yoy_growth_pct FROM mart_category_quarterly WHERE year_quarter = '2026-Q3' ORDER BY yoy_growth DESC",
+      "attempts": 1,
+      "seconds": 2.008600524000002,
+      "tags": [
+        "growth",
+        "category",
+        "relative-period",
+        "spanish"
+      ]
+    },
+    {
+      "id": "q02",
+      "question": "¿Cuál es la tasa de recompra por canal?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT acquisition_channel AS canal_de_adquisicion, COUNT(*) AS clientes_elegibles, SUM(repurchased_within_90d) AS clientes_recompra, ROUND(100.0 * AVG(repurchased_within_90d), 1) AS tasa_recompra_pct FROM dim_customer WHERE repurchased_within_90d IS NOT NULL GROUP BY acquisition_channel ORDER BY tasa_recompra_pct DESC",
+      "attempts": 1,
+      "seconds": 2.04356293699999,
+      "tags": [
+        "repurchase",
+        "channel",
+        "glossary",
+        "spanish"
+      ]
+    },
+    {
+      "id": "q03",
+      "question": "How much did we sell this year compared with the same period last year?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT ROUND(SUM(CASE WHEN order_date BETWEEN '2026-01-01' AND '2026-10-31' THEN net_sales END), 2) AS net_sales_2026_ytd, ROUND(SUM(CASE WHEN order_date BETWEEN '2025-01-01' AND '2025-10-31' THEN net_sales END), 2) AS net_sales_2025_same_period, ROUND(100.0 * (SUM(CASE WHEN order_date BETWEEN '2026-01-01' AND '2026-10-31' THEN net_sales END) / SUM(CASE WHEN order_date BETWEEN '2025-01-01' AND '2025-10-31' THEN net_sales END) - 1), 1) AS yoy_growth_pct FROM fct_orders WHERE order_date BETWEEN '2025-01-01' AND '2026-10-31' AND order_date NOT BETWEEN '2025-11-01' AND '2025-12-31'",
+      "attempts": 1,
+      "seconds": 3.474635111999987,
+      "tags": [
+        "net-sales",
+        "ytd",
+        "relative-period"
+      ]
+    },
+    {
+      "id": "q04",
+      "question": "¿Cuáles fueron las ventas netas por canal en 2025?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT channel_id, ROUND(SUM(net_sales), 2) AS net_sales FROM fct_orders WHERE order_date BETWEEN '2025-01-01' AND '2025-12-31' GROUP BY channel_id ORDER BY net_sales DESC",
+      "attempts": 1,
+      "seconds": 1.725778138999999,
+      "tags": [
+        "net-sales",
+        "channel",
+        "spanish"
+      ]
+    },
+    {
+      "id": "q05",
+      "question": "What is the gross margin % by category this year?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT category, ROUND(100.0 * SUM(gross_margin) / SUM(net_sales), 1) AS gross_margin_pct FROM fct_order_lines WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY category ORDER BY gross_margin_pct DESC",
+      "attempts": 1,
+      "seconds": 2.217951062999987,
+      "tags": [
+        "margin",
+        "category",
+        "ytd"
+      ]
+    },
+    {
+      "id": "q06",
+      "question": "What is the average order value by channel in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT channel_id, COUNT(*) AS orders, ROUND(SUM(net_sales), 2) AS net_sales, ROUND(SUM(net_sales) / COUNT(*), 2) AS avg_order_value FROM fct_orders WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY channel_id ORDER BY avg_order_value DESC",
+      "attempts": 1,
+      "seconds": 2.3054656850000015,
+      "tags": [
+        "aov",
+        "channel"
+      ]
+    },
+    {
+      "id": "q07",
+      "question": "How many active customers do we have?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT COUNT(*) AS active_customers FROM dim_customer WHERE is_active = 1",
+      "attempts": 1,
+      "seconds": 1.8939004110000042,
+      "tags": [
+        "active-customers",
+        "glossary"
+      ]
+    },
+    {
+      "id": "q08",
+      "question": "Which store had the highest net sales last quarter?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT s.store_name, s.city, ROUND(SUM(o.net_sales), 2) AS net_sales FROM fct_orders o JOIN dim_store s ON s.store_id = o.store_id WHERE o.channel_id = 'STORE' AND o.order_date BETWEEN '2026-07-01' AND '2026-09-30' GROUP BY s.store_name, s.city ORDER BY net_sales DESC LIMIT 1",
+      "attempts": 1,
+      "seconds": 2.4991001809999887,
+      "tags": [
+        "stores",
+        "relative-period"
+      ]
+    },
+    {
+      "id": "q09",
+      "question": "What is the return rate by category?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT category,\n       ROUND(100.0 * SUM(returned_amount) / SUM(gross_sales - discount_amount), 1) AS return_rate_pct\nFROM fct_order_lines\nGROUP BY category\nORDER BY return_rate_pct DESC",
+      "attempts": 1,
+      "seconds": 2.1399200539999867,
+      "tags": [
+        "returns",
+        "category",
+        "glossary"
+      ]
+    },
+    {
+      "id": "q10",
+      "question": "Show monthly net sales for 2025.",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT month_start, ROUND(SUM(net_sales), 2) AS net_sales FROM mart_sales_monthly WHERE month_start BETWEEN '2025-01-01' AND '2025-12-01' GROUP BY month_start ORDER BY month_start",
+      "attempts": 1,
+      "seconds": 2.320283853999996,
+      "tags": [
+        "net-sales",
+        "trend"
+      ]
+    },
+    {
+      "id": "q11",
+      "question": "How many new customers did each channel acquire in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT acquisition_channel, COUNT(*) AS new_customers FROM dim_customer WHERE first_order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY acquisition_channel ORDER BY new_customers DESC",
+      "attempts": 1,
+      "seconds": 2.151331393999982,
+      "tags": [
+        "new-customers",
+        "acquisition",
+        "channel"
+      ]
+    },
+    {
+      "id": "q12",
+      "question": "What share of net sales came from online channels in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN c.channel_type = 'Online' THEN o.net_sales ELSE 0 END) / SUM(o.net_sales), 1) AS online_share_pct, ROUND(SUM(CASE WHEN c.channel_type = 'Online' THEN o.net_sales ELSE 0 END), 2) AS online_net_sales, ROUND(SUM(o.net_sales), 2) AS total_net_sales FROM fct_orders o JOIN dim_channel c ON c.channel_id = o.channel_id WHERE o.order_date BETWEEN '2026-01-01' AND '2026-10-31'",
+      "attempts": 1,
+      "seconds": 2.906146745000001,
+      "tags": [
+        "share",
+        "channel"
+      ]
+    },
+    {
+      "id": "q13",
+      "question": "Which promotion generated the most incremental gross margin?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT promo_code, promo_name, promo_type, discount_band, start_date, end_date, ROUND(incremental_gross_margin, 2) AS incremental_gross_margin, ROUND(100.0 * net_sales_lift, 1) AS net_sales_lift_pct, ROUND(100.0 * after_vs_baseline, 1) AS after_vs_baseline_pct FROM mart_promo_performance WHERE incremental_gross_margin IS NOT NULL ORDER BY incremental_gross_margin DESC LIMIT 10",
+      "attempts": 1,
+      "seconds": 2.4912778389999914,
+      "tags": [
+        "promotions"
+      ]
+    },
+    {
+      "id": "q14",
+      "question": "What percentage of net sales was sold on promotion each year?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT d.year, ROUND(SUM(CASE WHEN l.is_promo = 1 THEN l.net_sales ELSE 0 END), 2) AS promo_net_sales, ROUND(SUM(l.net_sales), 2) AS total_net_sales, ROUND(100.0 * SUM(CASE WHEN l.is_promo = 1 THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS promo_share_pct FROM fct_order_lines l JOIN dim_date d ON d.date = l.order_date GROUP BY d.year ORDER BY d.year",
+      "attempts": 1,
+      "seconds": 2.2590146490000222,
+      "tags": [
+        "promotions",
+        "share"
+      ]
+    },
+    {
+      "id": "q15",
+      "question": "What is the 3-month retention of customers acquired in January 2025?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT cohort_month, months_since_first, SUM(cohort_customers) AS cohort_customers, SUM(active_customers) AS active_customers, ROUND(100.0 * SUM(active_customers) / SUM(cohort_customers), 1) AS month_3_retention_pct FROM mart_customer_cohorts WHERE cohort_month = '2025-01-01' AND months_since_first = 3 GROUP BY cohort_month, months_since_first",
+      "attempts": 1,
+      "seconds": 1.789938282999998,
+      "tags": [
+        "retention",
+        "cohort",
+        "glossary"
+      ]
+    },
+    {
+      "id": "q16",
+      "question": "¿Cuál es el ticket promedio en tiendas físicas frente a los canales en línea en 2026?",
+      "correct": false,
+      "reason": "no column matches channel_type",
+      "sql": "SELECT CASE WHEN o.channel_id = 'STORE' THEN 'Tiendas físicas' ELSE 'En línea' END AS tipo_canal, COUNT(*) AS orders, ROUND(SUM(o.net_sales), 2) AS net_sales, ROUND(SUM(o.net_sales) / COUNT(*), 2) AS avg_order_value FROM fct_orders o WHERE o.order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY 1 ORDER BY avg_order_value DESC",
+      "attempts": 1,
+      "seconds": 2.6144667350000077,
+      "tags": [
+        "aov",
+        "channel",
+        "spanish"
+      ]
+    },
+    {
+      "id": "q17",
+      "question": "What were the top 5 products by net sales in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT l.product_id, p.product_name, l.category, l.brand, ROUND(SUM(l.net_sales), 2) AS net_sales FROM fct_order_lines l JOIN dim_product p ON p.product_id = l.product_id WHERE l.order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY l.product_id, p.product_name, l.category, l.brand ORDER BY SUM(l.net_sales) DESC LIMIT 5",
+      "attempts": 1,
+      "seconds": 2.5721184010000115,
+      "tags": [
+        "products",
+        "ranking"
+      ]
+    },
+    {
+      "id": "q18",
+      "question": "How many orders did we have in October 2026, and how does that compare with October 2025?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT STRFTIME('%Y', order_date) AS year, COUNT(*) AS orders FROM fct_orders WHERE order_date BETWEEN '2025-10-01' AND '2025-10-31' OR order_date BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY 1 ORDER BY 1",
+      "attempts": 1,
+      "seconds": 2.125074613999999,
+      "tags": [
+        "orders",
+        "comparison"
+      ]
+    },
+    {
+      "id": "q19",
+      "question": "What is the contribution margin % by channel in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT channel_id, ROUND(100.0 * SUM(contribution_margin) / SUM(net_sales), 1) AS contribution_margin_pct FROM fct_orders WHERE order_date BETWEEN '2026-01-01' AND '2026-10-31' GROUP BY channel_id ORDER BY contribution_margin_pct DESC",
+      "attempts": 1,
+      "seconds": 2.6200148409999997,
+      "tags": [
+        "contribution-margin",
+        "channel",
+        "glossary"
+      ]
+    },
+    {
+      "id": "q20",
+      "question": "Which department has the most active customers?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT department, COUNT(*) AS active_customers FROM dim_customer WHERE is_active = 1 GROUP BY department ORDER BY active_customers DESC",
+      "attempts": 1,
+      "seconds": 1.8127576600000168,
+      "tags": [
+        "active-customers",
+        "geography"
+      ]
+    },
+    {
+      "id": "q21",
+      "question": "What were Beauty net sales by quarter in 2026?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT year_quarter, ROUND(net_sales, 2) AS net_sales FROM mart_category_quarterly WHERE category = 'Beauty' AND year = 2026 ORDER BY year_quarter",
+      "attempts": 1,
+      "seconds": 1.3461130960000105,
+      "tags": [
+        "net-sales",
+        "category",
+        "trend"
+      ]
+    },
+    {
+      "id": "q22",
+      "question": "¿Qué porcentaje de las ventas netas de Belleza en 2026 vino de productos de marca propia?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN is_private_label = 1 THEN net_sales ELSE 0 END) / SUM(net_sales), 1) AS private_label_share_pct, ROUND(SUM(CASE WHEN is_private_label = 1 THEN net_sales ELSE 0 END), 2) AS private_label_net_sales, ROUND(SUM(net_sales), 2) AS beauty_net_sales FROM fct_order_lines WHERE category = 'Beauty' AND order_date BETWEEN '2026-01-01' AND '2026-10-31'",
+      "attempts": 1,
+      "seconds": 2.674361690000012,
+      "tags": [
+        "private-label",
+        "share",
+        "spanish"
+      ]
+    },
+    {
+      "id": "q23",
+      "question": "What are the three most common return reasons for online orders, by number of returns?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT reason, COUNT(*) AS returns FROM fct_returns WHERE channel_id IN ('WEB', 'APP', 'MARKETPLACE') GROUP BY reason ORDER BY returns DESC LIMIT 3",
+      "attempts": 1,
+      "seconds": 1.8669363950000104,
+      "tags": [
+        "returns"
+      ]
+    },
+    {
+      "id": "q24",
+      "question": "Among customers who placed a second order, what is the average number of days between their first and second order, by acquisition channel?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT acquisition_channel, COUNT(*) AS customers_with_second_order, ROUND(AVG(days_to_second_order), 1) AS avg_days_to_second_order FROM dim_customer WHERE second_order_date IS NOT NULL GROUP BY acquisition_channel ORDER BY avg_days_to_second_order DESC",
+      "attempts": 1,
+      "seconds": 1.9292144140000005,
+      "tags": [
+        "frequency",
+        "acquisition"
+      ]
+    },
+    {
+      "id": "q25",
+      "question": "Which month of 2025 had the highest net sales?",
+      "correct": true,
+      "reason": "ok",
+      "sql": "SELECT d.year_month, ROUND(SUM(m.net_sales), 2) AS net_sales FROM mart_sales_monthly m JOIN dim_date d ON d.date = m.month_start WHERE d.year = 2025 GROUP BY d.year_month ORDER BY net_sales DESC LIMIT 1",
+      "attempts": 1,
+      "seconds": 1.857876884999996,
+      "tags": [
+        "net-sales",
+        "seasonality"
+      ]
+    }
+  ]
+}

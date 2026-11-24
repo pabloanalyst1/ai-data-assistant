@@ -98,6 +98,7 @@ Details per question: [**docs/eval_results.md**](docs/eval_results.md).
 <!-- EVAL:START -->
 | Model | Correct | Execution accuracy | Run on |
 |---|---|---|---|
+| Claude (`claude-sonnet-5-5`) | 24 / 25 | **96%** | 2026-11-24 |
 | Offline baseline: no LLM, reuses the closest worked example | 0 / 25 | **0%** | 2026-11-23 |
 <!-- EVAL:END -->
 
