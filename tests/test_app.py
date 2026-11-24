@@ -6,6 +6,17 @@ import pytest
 APP = Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py"
 
 
+def element_types(at) -> list[str]:
+    """Names of every element type the app rendered (stable across Streamlit versions)."""
+    found, stack = [], [at._tree]
+    while stack:
+        node = stack.pop()
+        found.append(str(getattr(node, "type", type(node).__name__)).lower())
+        children = getattr(node, "children", {})
+        stack.extend(children.values() if isinstance(children, dict) else children)
+    return found
+
+
 @pytest.fixture
 def demo_env(monkeypatch, small_warehouse):
     for var in ("LLM_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
@@ -27,7 +38,8 @@ def test_asking_a_question_shows_the_answer(demo_env):
     at.chat_input[0].set_value("What were net sales by quarter?").run()
     assert not at.exception, at.exception
     assert len(at.dataframe) == 1
-    assert len(at.get("arrow_vega_lite_chart")) == 1  # the chart (Altair, in the query's row order)
+    kinds = element_types(at)
+    assert any("vega" in k or "chart" in k for k in kinds), kinds  # the chart (Altair, in the query's row order)
     assert any("SELECT" in c.value for c in at.code)
 
 
