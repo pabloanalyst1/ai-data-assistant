@@ -93,6 +93,8 @@ def main() -> None:
 
     def progress(r):
         print(f"  {r.id} {'OK  ' if r.correct else 'MISS'} {r.question[:70]:<70} {'' if r.correct else r.reason}")
+        if "API error" in r.reason:  # no credit, bad key, rate limit...: the model never answered
+            sys.exit(f"Stopped: the LLM API failed, so the run measures nothing and no results were saved.\n{r.reason}")
 
     results = evaluate(assistant, db, questions, progress)
     acc = accuracy(results)
